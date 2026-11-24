@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Finanças">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Meu Controle Financeiro</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--ac:#0f766e;--neg:#b91c1c;--pos:#15803d;--bd:#e3e6ea;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111418;--card:#1b2026;--tx:#eef0f3;--mut:#9aa3af;--ac:#2dd4bf;--neg:#f87171;--pos:#4ade80;--bd:#2a313a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111418;--card:#1b2026;--tx:#eef0f3;--mut:#9aa3af;--ac:#2dd4bf;--neg:#f87171;--pos:#4ade80;--bd:#2a313a;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:150px}
+main{max-width:560px;margin:0 auto;padding:12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:10px}
+h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 4px 8px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border:0}.row small{color:var(--mut);display:block}
+.neg{color:var(--neg)}.pos{color:var(--pos)}.b{font-weight:600;white-space:nowrap}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stats .card{margin:0}.stats .full{grid-column:1/-1}
+.stats small{color:var(--mut)}.stats div.v{font-size:20px;font-weight:700}
+.nav{display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px}
+.nav b{text-transform:capitalize}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 14px}
+button.p{background:var(--ac);color:#fff;border:0}
+button.x{padding:2px 8px;color:var(--mut)}
+.bar{height:6px;background:var(--bd);border-radius:4px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{flex:1;border:0;border-radius:0;background:none;padding:12px 2px;font-size:13px;color:var(--mut)}
+.tabs button.on{color:var(--ac);font-weight:700}
+.fab{position:fixed;right:16px;bottom:calc(66px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;font-size:30px;line-height:1;padding:0;background:var(--ac);color:#fff;border:0;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;z-index:9}
+.sheet{background:var(--card);width:100%;max-width:560px;margin:0 auto;border-radius:18px 18px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow:auto}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.empty{color:var(--mut);text-align:center;padding:16px 0}
+</style></head><body>
+<main id="app"></main>
+<button class="fab" id="fab" aria-label="Adicionar">+</button>
+<div class="tabs" id="tabs"></div>
+<div id="modal"></div>
+<script>
+const K='fin1';let S=null;
+try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+S=S||{cards:[],tx:[],inst:[],fix:[]};
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+const $=s=>document.querySelector(s);
+const R=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const d0=new Date(),today=d0.getFullYear()+'-'+pad(d0.getMonth()+1)+'-'+pad(d0.getDate());
+const mi=s=>{const[y,m]=s.split('-');return +y*12+ +m-1};
+const nowM=mi(today.slice(0,7));
+let tab='resumo',ym=today.slice(0,7);
+const mname=m=>new Date(+m.split('-')[0],+m.split('-')[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+const shift=n=>{const x=mi(ym)+n;ym=Math.floor(x/12)+'-'+pad(x%12+1);render()};
+const cname=id=>(S.cards.find(c=>c.id==id)||{}).name||'';
+
+function calc(m){
+  const c=mi(m),tx=S.tx.filter(t=>t.date.slice(0,7)==m);
+  const parc=S.inst.map(i=>({i,k:c-mi(i.start)+1})).filter(x=>x.k>=1&&x.k<=x.i.n);
+  const sum=a=>a.reduce((s,v)=>s+v,0);
+  const ent=sum(tx.filter(t=>t.type=='in').map(t=>t.v))+sum(S.fix.filter(f=>f.type=='in').map(f=>f.v));
+  const fixOut=sum(S.fix.filter(f=>f.type=='out').map(f=>f.v));
+  const txOut=sum(tx.filter(t=>t.type=='out').map(t=>t.v));
+  const pTot=sum(parc.map(x=>x.i.v));
+  const cards=S.cards.map(cd=>({cd,tot:sum(tx.filter(t=>t.card==cd.id&&t.type=='out').map(t=>t.v))+sum(parc.filter(x=>x.i.card==cd.id).map(x=>x.i.v))}));
+  return{tx,parc,ent,fixOut,txOut,pTot,cards,sai:txOut+fixOut+pTot};
+}
+const mnav=()=>`<div class="nav"><button onclick="shift(-1)">‹</button><b>${mname(ym)}</b><button onclick="shift(1)">›</button></div>`;
+const del=(k,id)=>`<button class="x" onclick="rm('${k}','${id}')">✕</button>`;
+
+const V={
+resumo(){const c=calc(ym),sal=c.ent-c.sai;
+ return mnav()+`<div class="stats">
+ <div class="card"><small>Entradas</small><div class="v pos">${R(c.ent)}</div></div>
+ <div class="card"><small>Saídas</small><div class="v neg">${R(c.sai)}</div></div>
+ <div class="card full"><small>Saldo do mês</small><div class="v ${sal<0?'neg':'pos'}">${R(sal)}</div></div></div>
+ <h2>Faturas dos cartões</h2><div class="card">${c.cards.length?c.cards.map(x=>`<div class="row"><div>${esc(x.cd.name)}<small>vence dia ${x.cd.due}</small></div><span class="b">${R(x.tot)}</span></div>`).join(''):'<div class="empty">Cadastre um cartão na aba Cartões</div>'}</div>
+ <h2>Parcelas deste mês</h2><div class="card">${c.parc.length?c.parc.map(x=>`<div class="row"><div>${esc(x.i.desc)}<small>parcela ${x.k}/${x.i.n}</small></div><span class="b">${R(x.i.v)}</span></div>`).join('')+`<div class="row"><b>Total</b><span class="b">${R(c.pTot)}</span></div>`:'<div class="empty">Nenhuma parcela neste mês</div>'}</div>
+ <h2>Contas fixas</h2><div class="card"><div class="row"><span>Total de contas fixas</span><span class="b neg">${R(c.fixOut)}</span></div></div>`},
+gastos(){const c=calc(ym),l=[...c.tx].sort((a,b)=>b.date.localeCompare(a.date));
+ return mnav()+`<div class="card">${l.length?l.map(t=>`<div class="row"><div>${esc(t.desc)}<small>${t.date.split('-').reverse().join('/')}${t.card?' · '+esc(cname(t.card)):''}</small></div><span class="b ${t.type=='in'?'pos':'neg'}">${t.type=='in'?'+':'−'}${R(t.v)}</span>${del('tx',t.id)}</div>`).join(''):'<div class="empty">Sem lançamentos neste mês. Toque no + para adicionar.</div>'}</div>`},
+parcelas(){let rest=0,mes=0;
+ const rows=S.inst.map(i=>{const paid=Math.max(0,Math.min(i.n,nowM-mi(i.start)+1)),falta=i.n-paid;rest+=falta*i.v;if(falta>0)mes+=i.v;
+  return`<div class="card"><div class="row" style="border:0;padding:0"><div>${esc(i.desc)}<small>${i.n}x de ${R(i.v)}${i.card?' · '+esc(cname(i.card)):''}</small></div>${del('inst',i.id)}</div>
+  <div class="row" style="border:0;padding:6px 0 0"><span>${paid}/${i.n} pagas</span><span class="b ${falta?'neg':'pos'}">${falta?'faltam '+falta+' · '+R(falta*i.v):'quitada ✓'}</span></div>
+  <div class="bar"><i style="width:${paid/i.n*100}%"></i></div></div>`}).join('');
+ return`<div class="card"><div class="row"><span>Total que falta pagar</span><span class="b neg">${R(rest)}</span></div><div class="row"><span>Parcelas ativas por mês</span><span class="b">${R(mes)}</span></div></div>`+(rows||'<div class="empty">Nenhuma compra parcelada</div>')},
+fixas(){const t=(ty)=>S.fix.filter(f=>f.type==ty);
+ const blk=(ty,tt)=>`<h2>${tt}</h2><div class="card">${t(ty).length?t(ty).map(f=>`<div class="row"><div>${esc(f.desc)}<small>dia ${f.day}</small></div><span class="b">${R(f.v)}</span>${del('fix',f.id)}</div>`).join(''):'<div class="empty">Nada cadastrado</div>'}</div>`;
+ return blk('out','Contas fixas (saídas)')+blk('in','Rendas fixas (entradas)')},
+cartoes(){return`<div class="card">${S.cards.length?S.cards.map(c=>`<div class="row"><div>${esc(c.name)}<small>vence dia ${c.due}</small></div>${del('cards',c.id)}</div>`).join(''):'<div class="empty">Nenhum cartão. Toque no + para cadastrar.</div>'}</div>
+ <h2>Backup dos dados</h2><div class="card"><div class="row"><button onclick="bk()">Copiar backup</button><button onclick="rs()">Restaurar</button></div><small style="color:var(--mut)">Os dados ficam só neste aparelho. Guarde um backup de vez em quando.</small></div>`}
+};
+const T=[['resumo','Resumo'],['gastos','Lançamentos'],['parcelas','Parcelas'],['fixas','Fixas'],['cartoes','Cartões']];
+const FM={resumo:'tx',gastos:'tx',parcelas:'inst',fixas:'fix',cartoes:'cards'};
+function render(){
+ $('#app').innerHTML=V[tab]();
+ $('#tabs').innerHTML=T.map(([k,n])=>`<button class="${k==tab?'on':''}" onclick="tab='${k}';render();scrollTo(0,0)">${n}</button>`).join('');
+}
+function box(h){$('#modal').innerHTML=`<div class="modal" onclick="if(event.target==this)closeM()"><div class="sheet">${h}</div></div>`}
+function msg(t){const d=document.createElement('div');d.textContent=t;d.style.cssText='position:fixed;left:16px;right:16px;top:calc(16px + env(safe-area-inset-top,0px));z-index:99;background:var(--neg);color:#fff;padding:12px;border-radius:10px;text-align:center';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
+function rm(k,id){box(`<p>Excluir este item?</p><div style="display:flex;gap:8px"><button style="flex:1" onclick="closeM()">Cancelar</button><button class="p" style="flex:1" onclick="doRm('${k}','${id}')">Excluir</button></div>`)}
+function doRm(k,id){S[k]=S[k].filter(x=>x.id!=id);save();closeM();render()}
+function bk(){box(`<p>Copie o texto abaixo e guarde em um lugar seguro:</p><textarea id="bkt" rows="6" readonly onclick="this.select()"></textarea><button class="p" style="width:100%;margin-top:10px" onclick="closeM()">Fechar</button>`);$('#bkt').value=JSON.stringify(S)}
+function rs(){box(`<p>Cole aqui o backup:</p><textarea id="bkt" rows="6"></textarea><button class="p" style="width:100%;margin-top:10px" onclick="doRs()">Restaurar</button>`)}
+function doRs(){try{const o=JSON.parse($('#bkt').value);if(o.tx&&o.cards&&o.inst&&o.fix){S=o;save();closeM();render()}else throw 0}catch(e){msg('Backup inválido.')}}
+
+const cardOpts=()=>[['','Sem cartão']].concat(S.cards.map(c=>[c.id,c.name]));
+const FORMS={
+ tx:{t:'Novo lançamento',f:()=>[['type','Tipo','sel',[['out','Gasto'],['in','Entrada']]],['desc','Descrição','text'],['v','Valor (R$)','num'],['date','Data','date',today],['card','Cartão de crédito','sel',cardOpts()]]},
+ inst:{t:'Compra parcelada',f:()=>[['desc','O que foi comprado','text'],['v','Valor de cada parcela (R$)','num'],['n','Número de parcelas','int'],['start','Mês da 1ª parcela','month',today.slice(0,7)],['card','Cartão de crédito','sel',cardOpts()]]},
+ fix:{t:'Conta ou renda fixa',f:()=>[['type','Tipo','sel',[['out','Conta (saída)'],['in','Renda (entrada)']]],['desc','Descrição','text'],['v','Valor mensal (R$)','num'],['day','Dia do mês','int']]},
+ cards:{t:'Novo cartão',f:()=>[['name','Nome do cartão','text'],['due','Dia de vencimento da fatura','int']]}
+};
+function openForm(){
+ const k=FM[tab],F=FORMS[k],fs=F.f();
+ $('#modal').innerHTML=`<div class="modal" onclick="if(event.target==this)closeM()"><div class="sheet"><b style="font-size:18px">${F.t}</b>`+
+ fs.map(([n,l,ty,x])=>`<label>${l}</label>`+(ty=='sel'?`<select id="f_${n}">${x.map(o=>`<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select>`:
+  `<input id="f_${n}" type="${ty=='num'||ty=='int'?'number':ty}" ${ty=='num'?'step="0.01" inputmode="decimal"':ty=='int'?'inputmode="numeric"':''} ${x?`value="${x}"`:''}>`)).join('')+
+ `<div style="display:flex;gap:8px;margin-top:16px"><button style="flex:1" onclick="closeM()">Cancelar</button><button class="p" style="flex:1" onclick="sub('${k}')">Salvar</button></div></div></div>`;
+}
+const closeM=()=>$('#modal').innerHTML='';
+function sub(k){
+ const o={id:uid()};
+ for(const [n,,ty] of FORMS[k].f()){let v=$('#f_'+n).value;
+  if(ty=='num'||ty=='int'){v=parseFloat(String(v).replace(',','.'));if(isNaN(v)||v<=0&&n!='day'&&n!='due'){msg('Preencha os números corretamente.');return}}
+  else if(ty=='text'&&!v.trim()){msg('Preencha o nome/descrição.');return}
+  else if((ty=='date'||ty=='month')&&!v){msg('Informe a data.');return}
+  o[n]=v}
+ S[k].push(o);save();closeM();
+ if(k=='tx')ym=o.date.slice(0,7);
+ render();
+}
+$('#fab').onclick=openForm;
+render();
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script></body></html>
